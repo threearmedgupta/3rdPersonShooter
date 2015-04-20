@@ -1,6 +1,8 @@
 
 #include "BaseApplication.h"
 
+CEGUI::MouseButton convertButton(OIS::MouseButtonID buttonID);
+
 //-------------------------------------------------------------------------------------
 BaseApplication::BaseApplication(void)
     : mRoot(0),
@@ -17,6 +19,7 @@ BaseApplication::BaseApplication(void)
     mInputManager(0),
     mMouse(0),
     mKeyboard(0),
+    mRenderer(0),
 //addendum
     level(0)
 {
@@ -113,32 +116,32 @@ void BaseApplication::createFrameListener(void)
     //Register as a Window listener
     Ogre::WindowEventUtilities::addWindowEventListener(mWindow, this);
 
-  	OgreBites::InputContext inputContext;
-  	inputContext.mMouse = mMouse;
-  	inputContext.mKeyboard = mKeyboard;
-    mTrayMgr = new OgreBites::SdkTrayManager("InterfaceName", mWindow, inputContext, this);
-    mTrayMgr->showFrameStats(OgreBites::TL_BOTTOMLEFT);
-    //mTrayMgr->showLogo(OgreBites::TL_BOTTOMRIGHT);
-    mTrayMgr->hideCursor();
+  	// OgreBites::InputContext inputContext;
+  	// inputContext.mMouse = mMouse;
+  	// inputContext.mKeyboard = mKeyboard;
+   //  mTrayMgr = new OgreBites::SdkTrayManager("InterfaceName", mWindow, inputContext, this);
+   //  mTrayMgr->showFrameStats(OgreBites::TL_BOTTOMLEFT);
+   //  //mTrayMgr->showLogo(OgreBites::TL_BOTTOMRIGHT);
+   //  mTrayMgr->hideCursor();
 
-    // create a params panel for displaying sample details
-    Ogre::StringVector items;
-    items.push_back("cam.pX");
-    items.push_back("cam.pY");
-    items.push_back("cam.pZ");
-    items.push_back("");
-    items.push_back("cam.oW");
-    items.push_back("cam.oX");
-    items.push_back("cam.oY");
-    items.push_back("cam.oZ");
-    items.push_back("");
-    items.push_back("Filtering");
-    items.push_back("Poly Mode");
+   //  // create a params panel for displaying sample details
+   //  Ogre::StringVector items;
+   //  items.push_back("cam.pX");
+   //  items.push_back("cam.pY");
+   //  items.push_back("cam.pZ");
+   //  items.push_back("");
+   //  items.push_back("cam.oW");
+   //  items.push_back("cam.oX");
+   //  items.push_back("cam.oY");
+   //  items.push_back("cam.oZ");
+   //  items.push_back("");
+   //  items.push_back("Filtering");
+   //  items.push_back("Poly Mode");
 
-    mDetailsPanel = mTrayMgr->createParamsPanel(OgreBites::TL_NONE, "DetailsPanel", 200, items);
-    mDetailsPanel->setParamValue(9, "Bilinear");
-    mDetailsPanel->setParamValue(10, "Solid");
-    mDetailsPanel->hide();
+   //  mDetailsPanel = mTrayMgr->createParamsPanel(OgreBites::TL_NONE, "DetailsPanel", 200, items);
+   //  mDetailsPanel->setParamValue(9, "Bilinear");
+   //  mDetailsPanel->setParamValue(10, "Solid");
+   //  mDetailsPanel->hide();
 
     mRoot->addFrameListener(this);
 }
@@ -240,8 +243,34 @@ bool BaseApplication::setup(void)
     createScene();
     createFrameListener();
 
+    setupGUI();
+
     return true;
 };
+//-------------------------------------------------------------------------------------
+void BaseApplication::setupGUI(void)
+{
+    mRenderer = &CEGUI::OgreRenderer::bootstrapSystem();
+    CEGUI::ImageManager::setImagesetDefaultResourceGroup("Imagesets");
+    CEGUI::Font::setDefaultResourceGroup("Fonts");
+    CEGUI::Scheme::setDefaultResourceGroup("Schemes");
+    CEGUI::WidgetLookManager::setDefaultResourceGroup("LookNFeel");
+    CEGUI::WindowManager::setDefaultResourceGroup("Layouts");
+
+    CEGUI::SchemeManager::getSingleton().createFromFile("TaharezLook.scheme");
+    CEGUI::System::getSingleton().getDefaultGUIContext().getMouseCursor().setDefaultImage("TaharezLook/MouseArrow");
+
+    CEGUI::WindowManager &wmgr = CEGUI::WindowManager::getSingleton();
+    CEGUI::Window *sheet = wmgr.createWindow("DefaultWindow", "Main/RootSheet");
+    CEGUI::System::getSingleton().getDefaultGUIContext().setRootWindow(sheet);
+
+    CEGUI::Window *quit = wmgr.createWindow("TaharezLook/Button", "CEGUIDemo/QuitButton");
+    quit->setText("Quit");
+    quit->setSize(CEGUI::USize(CEGUI::UDim(0.15, 0), CEGUI::UDim(0.05, 0)));
+    sheet->addChild(quit);
+    CEGUI::System::getSingleton().getDefaultGUIContext().setRootWindow(sheet);
+    quit->subscribeEvent(CEGUI::PushButton::EventClicked, CEGUI::Event::Subscriber(&BaseApplication::quit, this));
+}
 //-------------------------------------------------------------------------------------
 bool BaseApplication::frameRenderingQueued(const Ogre::FrameEvent& evt)
 {
@@ -255,65 +284,111 @@ bool BaseApplication::frameRenderingQueued(const Ogre::FrameEvent& evt)
     mKeyboard->capture();
     mMouse->capture();
 
-    mTrayMgr->frameRenderingQueued(evt);
+    CEGUI::System::getSingleton().injectTimePulse(evt.timeSinceLastFrame);
 
-    if (!mTrayMgr->isDialogVisible())
-    {
-        mCameraMan->frameRenderingQueued(evt);   // if dialog isn't up, then update the camera
-        if (mDetailsPanel->isVisible())   // if details panel is visible, then update its contents
-        {
-            mDetailsPanel->setParamValue(0, Ogre::StringConverter::toString(mCamera->getDerivedPosition().x));
-            mDetailsPanel->setParamValue(1, Ogre::StringConverter::toString(mCamera->getDerivedPosition().y));
-            mDetailsPanel->setParamValue(2, Ogre::StringConverter::toString(mCamera->getDerivedPosition().z));
-            mDetailsPanel->setParamValue(4, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().w));
-            mDetailsPanel->setParamValue(5, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().x));
-            mDetailsPanel->setParamValue(6, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().y));
-            mDetailsPanel->setParamValue(7, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().z));
-        }
-    }
+    // mTrayMgr->frameRenderingQueued(evt);
+
+    // if (!mTrayMgr->isDialogVisible())
+    // {
+    //     mCameraMan->frameRenderingQueued(evt);   // if dialog isn't up, then update the camera
+    //     if (mDetailsPanel->isVisible())   // if details panel is visible, then update its contents
+    //     {
+    //         mDetailsPanel->setParamValue(0, Ogre::StringConverter::toString(mCamera->getDerivedPosition().x));
+    //         mDetailsPanel->setParamValue(1, Ogre::StringConverter::toString(mCamera->getDerivedPosition().y));
+    //         mDetailsPanel->setParamValue(2, Ogre::StringConverter::toString(mCamera->getDerivedPosition().z));
+    //         mDetailsPanel->setParamValue(4, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().w));
+    //         mDetailsPanel->setParamValue(5, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().x));
+    //         mDetailsPanel->setParamValue(6, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().y));
+    //         mDetailsPanel->setParamValue(7, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().z));
+    //     }
+    // }
     return true;
 }
 //-------------------------------------------------------------------------------------
 bool BaseApplication::keyPressed( const OIS::KeyEvent &arg )
 {
-    if (mTrayMgr->isDialogVisible()) return true;   // don't process any more keys if dialog is up
+    // if (mTrayMgr->isDialogVisible()) return true;   // don't process any more keys if dialog is up
 
 
-    if (arg.key == OIS::KC_ESCAPE)
-    {
-        mShutDown = true;
-    }
+    // if (arg.key == OIS::KC_ESCAPE)
+    // {
+    //     mShutDown = true;
+    // }
 
-    mCameraMan->injectKeyDown(arg);
+    // mCameraMan->injectKeyDown(arg);
+    // return true;
+
+    CEGUI::GUIContext& context = CEGUI::System::getSingleton().getDefaultGUIContext();
+    context.injectKeyDown((CEGUI::Key::Scan)arg.key);
+    context.injectChar((CEGUI::Key::Scan)arg.text);
     return true;
 }
 
 bool BaseApplication::keyReleased( const OIS::KeyEvent &arg )
 {
-    mCameraMan->injectKeyUp(arg);
+    // mCameraMan->injectKeyUp(arg);
+    // return true;
+
+    CEGUI::System::getSingleton().getDefaultGUIContext().injectKeyUp((CEGUI::Key::Scan)arg.key);
     return true;
+}
+
+CEGUI::MouseButton convertButton(OIS::MouseButtonID buttonID)
+{
+    switch (buttonID)
+    {
+    case OIS::MB_Left:
+        return CEGUI::LeftButton;
+ 
+    case OIS::MB_Right:
+        return CEGUI::RightButton;
+ 
+    case OIS::MB_Middle:
+        return CEGUI::MiddleButton;
+ 
+    default:
+        return CEGUI::LeftButton;
+    }
 }
 
 bool BaseApplication::mouseMoved( const OIS::MouseEvent &arg )
 {
-    /*
-    if (mTrayMgr->injectMouseMove(arg)) return true;
-    mCameraMan->injectMouseMove(arg);
-    */
+    
+    // if (mTrayMgr->injectMouseMove(arg)) return true;
+    // mCameraMan->injectMouseMove(arg);
+    
+    // return true;
+
+    CEGUI::GUIContext& context = CEGUI::System::getSingleton().getDefaultGUIContext();
+    context.injectMouseMove(arg.state.X.rel, arg.state.Y.rel);
+    // Scroll wheel.
+    if (arg.state.Z.rel)
+        context.injectMouseWheelChange(arg.state.Z.rel / 120.0f);
     return true;
 }
 
 bool BaseApplication::mousePressed( const OIS::MouseEvent &arg, OIS::MouseButtonID id )
 {
-    if (mTrayMgr->injectMouseDown(arg, id)) return true;
-    mCameraMan->injectMouseDown(arg, id);
+    // if (mTrayMgr->injectMouseDown(arg, id)) return true;
+    // mCameraMan->injectMouseDown(arg, id);
+    // return true;
+
+    CEGUI::System::getSingleton().getDefaultGUIContext().injectMouseButtonDown(convertButton(id));
     return true;
 }
 
 bool BaseApplication::mouseReleased( const OIS::MouseEvent &arg, OIS::MouseButtonID id )
 {
-    if (mTrayMgr->injectMouseUp(arg, id)) return true;
-    mCameraMan->injectMouseUp(arg, id);
+    // if (mTrayMgr->injectMouseUp(arg, id)) return true;
+    // mCameraMan->injectMouseUp(arg, id);
+    // return true;
+    CEGUI::System::getSingleton().getDefaultGUIContext().injectMouseButtonUp(convertButton(id));
+    return true;
+}
+
+bool BaseApplication::quit(const CEGUI::EventArgs &e)
+{
+    mShutDown = true;
     return true;
 }
 

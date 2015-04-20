@@ -15,8 +15,8 @@
 #include <OISKeyboard.h>
 #include <OISMouse.h>
 
-//#include <CEGUI/CEGUI.h>
-//#include <CEGUI/RendererModules/Ogre/Renderer.h> //from 0.8 it's just Ogre/Renderer.h
+#include <CEGUI/CEGUI.h>
+#include <CEGUI/RendererModules/Ogre/Renderer.h> //from 0.8 it's just Ogre/Renderer.h
 
 #include <SdkTrays.h>
 #include <SdkCameraMan.h>
@@ -33,6 +33,8 @@ public:
     void go(void);
 
 protected:
+    CEGUI::OgreRenderer* mRenderer;
+
     bool setup();
     bool configure(void);
     void chooseSceneManager(void);
@@ -44,6 +46,7 @@ protected:
     void setupResources(void);
     void createResourceListener(void);
     void loadResources(void);
+    void setupGUI(void);
 
     // Ogre::FrameListener
     bool frameRenderingQueued(const Ogre::FrameEvent& evt);
@@ -55,6 +58,8 @@ protected:
     bool mouseMoved( const OIS::MouseEvent &arg );
     bool mousePressed( const OIS::MouseEvent &arg, OIS::MouseButtonID id );
     bool mouseReleased( const OIS::MouseEvent &arg, OIS::MouseButtonID id );
+
+    bool quit(const CEGUI::EventArgs &e);
 
     // Ogre::WindowEventListener
     //Adjust mouse clipping area
