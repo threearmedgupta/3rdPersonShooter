@@ -1,0 +1,178 @@
+material redninja
+{
+	technique
+	{
+		pass
+		{
+		 ambient 0.616687 0.90461 1 1.0
+     diffuse 0.616687 0.90461 1 1.0
+     specular 1 1 1 1 20
+
+     scene_blend alpha_blend
+			texture_unit
+			{
+				texture redninja.jpg
+			}
+		}
+	}
+}
+
+material PlayerWire
+{
+	technique
+	{
+		pass
+		{
+		 ambient 0.616687 0.90461 1 0.7
+         diffuse 0.616687 0.90461 1 0.7
+         specular 1 1 1 1 20
+
+         scene_blend alpha_blend
+			texture_unit
+			{
+				texture wireframe.png
+			}
+		}
+	}
+}
+material PlayerWire2
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture wireframe2.png
+				alpha_op_ex source1 src_manual src_current 0.5
+			}
+			shading phong
+		}
+	}
+}
+
+material firestar
+ {
+   technique
+   {
+     pass
+     {
+       scene_blend alpha_blend
+       depth_write off
+
+       texture_unit
+       {
+         texture firestar.jpg
+       }
+			emissive .9 .5 .5 1
+     }
+   }
+ }
+material icestar
+ {
+   technique
+   {
+     pass
+     {
+       scene_blend alpha_blend
+       depth_write off
+
+       texture_unit
+       {
+         texture icestar.jpg
+       }
+			emissive .8 .8 1.0 1
+     }
+   }
+ }
+material metal
+{
+	technique
+	{
+		pass
+		{
+			ambient 0.9 0.9 0.9
+			diffuse 0.5 0.8 0.5
+			specular 1.0 1.0 1.0 12.5
+
+			texture_unit
+			{
+				texture metal.jpg
+			}
+			emissive .9 .9 .9 1
+			shading phong
+		}
+	}
+}
+
+
+material stonewall
+{
+	technique
+	{
+		pass
+		{
+			ambient 0.5 0.5 0.5
+			diffuse 0.5 0.8 0.5
+			specular 1.0 1.0 1.0 12.5
+
+			texture_unit
+			{
+				texture stone_wall_texture.jpg
+			}
+			shading phong
+		}
+	}
+}
+material tiledfloor
+{
+	technique
+	{
+		pass
+		{
+			ambient 0.7 0.7 0.7
+			diffuse 0.5 0.8 0.5
+			specular 1.0 1.0 1.0 12.5
+
+			texture_unit
+			{
+				texture tiled_floor_texture.jpg
+			}
+			shading phong
+		}
+	}
+}
+
+material bloodsky
+{
+   technique
+   {
+      pass
+      {
+         lighting off
+         depth_write off
+
+         texture_unit
+         {
+            cubic_texture bloodsky.jpg separateUV
+            tex_address_mode clamp
+         }
+      }
+   }
+}
+
+material Ninja
+{
+	technique
+	{
+		pass
+		{
+
+			texture_unit
+			{
+				texture nskingr.jpg
+			}
+			shading phong
+		}
+	}
+}

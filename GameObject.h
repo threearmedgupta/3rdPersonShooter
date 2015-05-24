@@ -9,6 +9,7 @@ class OgreMotionState;
 class GameObject {
 protected:
     Ogre::String name;
+    Ogre::SceneManager* sceneMgr;
     Ogre::SceneNode* rootNode;
     Ogre::Entity* geom;
 
@@ -25,7 +26,11 @@ protected:
     btVector3 inertia;
     btQuaternion rotation;
 
+
 public:
+    Ogre::Vector3 m_directionVector;
+    Ogre::Real power;
+    bool hit;
     GameObject();
     void addToSimulator();
     btRigidBody* getBody();
@@ -33,10 +38,14 @@ public:
     void printpos();
     Ogre::SceneNode* getNode();
     Ogre::String getName();
+    Ogre::SceneManager* getSMP();
     void updateTransform();
     void setTransform(Ogre::Vector3 tr);
     void setTransform(btVector3 tr);
     Ogre::Vector3 getPos();
+    btVector3 getPosbt();
     void setPos(btVector3 pos);
+    void setRotation(btQuaternion rot);
+    Ogre::Entity* getEntity();
 
 };

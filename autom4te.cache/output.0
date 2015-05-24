@@ -15136,6 +15136,8 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 
 
 
+CXXFLAGS=-std=c++0x
+
 
 
 

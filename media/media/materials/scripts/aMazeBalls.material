@@ -1,0 +1,67 @@
+material PlayerWire
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture wireframe.png
+				alpha_op_ex source1 src_manual src_current 0.5
+			}
+			emissive 1.0 .9 .6 .5
+			shading phong
+		}
+	}
+}
+material PlayerWire2
+{
+	technique
+	{
+		pass
+		{
+			texture_unit
+			{
+				texture wireframe2.png
+				alpha_op_ex source1 src_manual src_current 0.5
+			}
+			shading phong
+		}
+	}
+}
+material stonewall
+{
+	technique
+	{
+		pass
+		{
+			ambient 0.7 0.7 0.7
+			diffuse 0.5 0.8 0.5
+			specular 1.0 1.0 1.0 12.5
+
+			texture_unit
+			{
+				texture stone_wall_texture.jpg
+			}
+			shading phong
+		}
+	}
+}
+material tiledfloor
+{
+	technique
+	{
+		pass
+		{
+			ambient 0.7 0.7 0.7
+			diffuse 0.5 0.8 0.5
+			specular 1.0 1.0 1.0 12.5
+
+			texture_unit
+			{
+				texture tiled_floor_texture.jpg
+			}
+			shading phong
+		}
+	}
+}

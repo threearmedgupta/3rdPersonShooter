@@ -1,7 +1,4 @@
-
 #include "BaseApplication.h"
-
-CEGUI::MouseButton convertButton(OIS::MouseButtonID buttonID);
 
 //-------------------------------------------------------------------------------------
 BaseApplication::BaseApplication(void)
@@ -13,18 +10,45 @@ BaseApplication::BaseApplication(void)
     mPluginsCfg(Ogre::StringUtil::BLANK),
     mTrayMgr(0),
     mCameraMan(0),
-    mDetailsPanel(0),
     mCursorWasVisible(false),
     mShutDown(false),
     mInputManager(0),
     mMouse(0),
     mKeyboard(0),
-    mRenderer(0),
-//addendum
-    level(0)
+    up(0),
+    down(0),
+    left(0),
+    right(0),
+    level_val(1),
+    state(GameState::Main),
+    rect(0),
+    play_button(0),
+    restart_button(0),
+    quit_button(0),
+    resume_button(0),
+    tryagain_button(0),
+    continue_button(0),
+    state_label(0),
+    progress_label(0),
+    playerState(PlayerState::NoFire),
+    last_playerState(PlayerState::NoFire),
+    weapon(Weapon1),
+    scoreboard(0),
+    mx(0),my(0),mz(0),scrollMax(4),scrollMin(0),theta(0),phi(0)
 {
+  cameraDir=Ogre::Vector3(0,-1,-1);
+  cameraPos=Ogre::Vector3(0,0,0);
+  mSensitivity=0.005;
 }
 
+btVector3 o2bVector3(Ogre::Vector3 in){
+  return btVector3(in.x,in.y,in.z);
+}
+
+
+void printOV3(Ogre::Vector3 in){
+    cout <<in.x<<","<<in.y<<","<<in.z<<"\n";
+}
 //-------------------------------------------------------------------------------------
 BaseApplication::~BaseApplication(void)
 {
@@ -37,16 +61,108 @@ BaseApplication::~BaseApplication(void)
     delete mRoot;
 }
 
+Monster* BaseApplication::spawnMonster()
+{
+    /* NOTE: for movement, ninja, every 'x' frames checks tile_map for a new, valid destination*/
+
+    float y_pos = player1->getPosbt().getY(); //make this a global constant?
+    //cout << "\n\nTILE MAP SIZE " << level->x*5 << " x " << level->y*5 << " x " << level->z*5 << "\n\n";
+
+    //Calculate total 2-D dimensions of level (x, y) and randomly choose (x,y) coordilight->setAttenuation(100, 1.0, 0.045, 0.0075);lightnates to be used to pick random tile
+    int tile_x_sp = rand() % level->x*5 + 1;
+    int tile_y_sp = rand() % level->y*5 + 1;
+
+    Ogre::Vector3 spawn_point, player_position;
+    spawn_point = Ogre::Vector3(tile_x_sp*-1, y_pos, tile_y_sp);
+    player_position = player1->getPos();
+
+    while ((spawn_point - player_position).length() <= 10)
+    {
+        tile_x_sp = rand() % level->x*5 + 1;
+        tile_y_sp = rand() % level->y*5 + 1;
+        spawn_point = Ogre::Vector3(tile_x_sp*-1, y_pos, tile_y_sp);
+    }
+
+    //Check validity of chosen tile, currently this should always work, should put in while loop when more validity conditions are implemented
+    //Further validity checks: no other monster on tile, not near player, only tiles with no walls
+
+    //create new monster
+    Monster* m = new Monster(mSceneMgr, spawn_point);
+    return m;
+}
+
 void BaseApplication::createScene(void)
 {
-	mSceneMgr->setAmbientLight(Ogre::ColourValue(0.3f,0.1f,0.3f));
+	mSceneMgr->setAmbientLight(Ogre::ColourValue(0.16f,0.1f,0.20f));
 	mSceneMgr->setShadowTechnique(Ogre::SHADOWTYPE_STENCIL_ADDITIVE);
+
+    Ogre::StringVector scores;
+    scores.push_back("Lives");
+    scores.push_back("Monsters Killed");
+    scores.push_back("Weapon");
+    scores.push_back("Ammunition");
+    scores.push_back("Monsters Left: ");
+    scores.push_back("Music");
+
+    scoreboard = mTrayMgr->createParamsPanel(OgreBites::TL_TOPLEFT, "Scoreboard", 250, scores);
+    scoreboard->setParamValue(3, "0");
+    scoreboard->setParamValue(4, "0");
+    scoreboard->setParamValue(5, "On");
+    mTrayMgr->moveWidgetToTray(scoreboard, OgreBites::TL_TOPLEFT, 0);
+    scoreboard->show();
+
+    mSceneMgr->setSkyDome(true, "bloodsky", 5, 8);
+
+    //level making
+    level->constructLevel();
+
+    //add objects to sim
+    sim->addObject(player1);
+    sim->addObject(level);
+
+    //Monster Code
+
+    srand(time(0));
+
+    for (int i = 0; i < level->num_monsters; i++)
+    {
+        Monster* m = spawnMonster();
+        m->changeState(Monster::STATE_WANDER, level, player1);
+        // monster_list.push_back(m);
+        sim->addObject(m);
+    }
+
+    //============
+
+    //setup music
+    bgmusic = new BGMusic();
+    bgmusic->start();
+
+    //setup weapons
+
+    weapon1 = new Weapon(WeaponState::Weapon1);
+    weapon2 = new Weapon(WeaponState::Weapon2);
+    weapon3 = new Weapon(WeaponState::Weapon3);
+    weapon4 = new Weapon(WeaponState::Weapon4);
+
+    weapon1->setSMP(mSceneMgr);
+    weapon2->setSMP(mSceneMgr);
+    weapon3->setSMP(mSceneMgr);
+    weapon4->setSMP(mSceneMgr);
+
+
+    equippedweapon = &weapon1;
+    scoreboard->setParamValue(2, (*equippedweapon)->name);
+
     //lighting
-/*
-	Ogre::Light * light = mSceneMgr->createLight("light1");
-	light->setPosition(Ogre::Vector3(0,500,500));
-	light->setDiffuseColour(1.0, 1.0, 1.0);
-	light->setSpecularColour(1.0, 0.0, 0.0);*/
+
+	light = mSceneMgr->createLight("light1");
+    light->setType(Ogre::Light::LT_POINT);
+
+	light->setDiffuseColour(.8, .4, .4);
+	light->setSpecularColour(.5, 0.0, 0.0);
+    light->setAttenuation(80, 1.0, 0.045, 0.0075);
+    light->setPosition(Ogre::Vector3(0,20,20));
 }
 
 //-------------------------------------------------------------------------------------
@@ -59,7 +175,7 @@ bool BaseApplication::configure(void)
     {
         // If returned true, user clicked OK so initialise
         // Here we choose to let the system create a default rendering window by passing 'true'
-        mWindow = mRoot->initialise(true, "Assignment 1 Render Window");
+        mWindow = mRoot->initialise(true, "Render Window");
 
         return true;
     }
@@ -81,12 +197,9 @@ void BaseApplication::createCamera(void)
 {
     // Create the camera
     mCamera = mSceneMgr->createCamera("PlayerCam");
-
-    // Position it at 500 in Z direction
-    mCamera->setPosition(Ogre::Vector3(0,0,1800));
-    // Look back along -Z
-    mCamera->lookAt(Ogre::Vector3(0,0,-300));
-    mCamera->setNearClipDistance(5);
+    mCamera->setPosition(cameraPos);
+    mCamera->lookAt(cameraPos+cameraDir);
+    mCamera->setNearClipDistance(1);
 
     mCameraMan = new OgreBites::SdkCameraMan(mCamera);   // create a default camera controller
 }
@@ -116,32 +229,8 @@ void BaseApplication::createFrameListener(void)
     //Register as a Window listener
     Ogre::WindowEventUtilities::addWindowEventListener(mWindow, this);
 
-  	// OgreBites::InputContext inputContext;
-  	// inputContext.mMouse = mMouse;
-  	// inputContext.mKeyboard = mKeyboard;
-   //  mTrayMgr = new OgreBites::SdkTrayManager("InterfaceName", mWindow, inputContext, this);
-   //  mTrayMgr->showFrameStats(OgreBites::TL_BOTTOMLEFT);
-   //  //mTrayMgr->showLogo(OgreBites::TL_BOTTOMRIGHT);
-   //  mTrayMgr->hideCursor();
-
-   //  // create a params panel for displaying sample details
-   //  Ogre::StringVector items;
-   //  items.push_back("cam.pX");
-   //  items.push_back("cam.pY");
-   //  items.push_back("cam.pZ");
-   //  items.push_back("");
-   //  items.push_back("cam.oW");
-   //  items.push_back("cam.oX");
-   //  items.push_back("cam.oY");
-   //  items.push_back("cam.oZ");
-   //  items.push_back("");
-   //  items.push_back("Filtering");
-   //  items.push_back("Poly Mode");
-
-   //  mDetailsPanel = mTrayMgr->createParamsPanel(OgreBites::TL_NONE, "DetailsPanel", 200, items);
-   //  mDetailsPanel->setParamValue(9, "Bilinear");
-   //  mDetailsPanel->setParamValue(10, "Solid");
-   //  mDetailsPanel->hide();
+  	mInputContext.mMouse = mMouse;
+  	mInputContext.mKeyboard = mKeyboard;
 
     mRoot->addFrameListener(this);
 }
@@ -235,41 +324,45 @@ bool BaseApplication::setup(void)
     createResourceListener();
     // Load resources
     loadResources();
-
-    //generate level
-    //level->generate();
-
-    // Create the scene
-    createScene();
     createFrameListener();
-
-    setupGUI();
+    createMenu();
 
     return true;
 };
 //-------------------------------------------------------------------------------------
-void BaseApplication::setupGUI(void)
+void BaseApplication::createMenu()
 {
-    mRenderer = &CEGUI::OgreRenderer::bootstrapSystem();
-    CEGUI::ImageManager::setImagesetDefaultResourceGroup("Imagesets");
-    CEGUI::Font::setDefaultResourceGroup("Fonts");
-    CEGUI::Scheme::setDefaultResourceGroup("Schemes");
-    CEGUI::WidgetLookManager::setDefaultResourceGroup("LookNFeel");
-    CEGUI::WindowManager::setDefaultResourceGroup("Layouts");
+    // Setup GUI
+    mTrayMgr = new OgreBites::SdkTrayManager("InterfaceName", mWindow, mInputContext, this);
+    play_button = mTrayMgr->createButton(OgreBites::TL_BOTTOM, "Play", "Play");
+    quit_button = mTrayMgr->createButton(OgreBites::TL_BOTTOM, "Exit", "Quit");
 
-    CEGUI::SchemeManager::getSingleton().createFromFile("TaharezLook.scheme");
-    CEGUI::System::getSingleton().getDefaultGUIContext().getMouseCursor().setDefaultImage("TaharezLook/MouseArrow");
+    // Create background material
+    Ogre::MaterialPtr material = Ogre::MaterialManager::getSingleton().create("Background Menu", "General");
+    material->getTechnique(0)->getPass(0)->createTextureUnitState("background.png");
+    material->getTechnique(0)->getPass(0)->setDepthCheckEnabled(false);
+    material->getTechnique(0)->getPass(0)->setDepthWriteEnabled(false);
+    material->getTechnique(0)->getPass(0)->setLightingEnabled(false);
 
-    CEGUI::WindowManager &wmgr = CEGUI::WindowManager::getSingleton();
-    CEGUI::Window *sheet = wmgr.createWindow("DefaultWindow", "Main/RootSheet");
-    CEGUI::System::getSingleton().getDefaultGUIContext().setRootWindow(sheet);
+    // Create background rectangle covering the whole screen
+    rect = new Ogre::Rectangle2D(true);
+    rect->setCorners(-1.0, 1.0, 1.0, -1.0);
+    rect->setMaterial("Background Menu");
 
-    CEGUI::Window *quit = wmgr.createWindow("TaharezLook/Button", "CEGUIDemo/QuitButton");
-    quit->setText("Quit");
-    quit->setSize(CEGUI::USize(CEGUI::UDim(0.15, 0), CEGUI::UDim(0.05, 0)));
-    sheet->addChild(quit);
-    CEGUI::System::getSingleton().getDefaultGUIContext().setRootWindow(sheet);
-    quit->subscribeEvent(CEGUI::PushButton::EventClicked, CEGUI::Event::Subscriber(&BaseApplication::quit, this));
+    // Render the background before everything else
+    rect->setRenderQueueGroup(Ogre::RENDER_QUEUE_BACKGROUND);
+
+    // Use infinite AAB to always stay visible
+    Ogre::AxisAlignedBox aabInf;
+    aabInf.setInfinite();
+    rect->setBoundingBox(aabInf);
+
+    // Attach background to the scene
+    Ogre::SceneNode* node = mSceneMgr->getRootSceneNode()->createChildSceneNode("Background");
+    node->attachObject(rect);
+
+    // Example of background scrolling
+    // material->getTechnique(0)->getPass(0)->getTextureUnitState(0)->setScrollAnimation(-0.25, 0.0);
 }
 //-------------------------------------------------------------------------------------
 bool BaseApplication::frameRenderingQueued(const Ogre::FrameEvent& evt)
@@ -284,111 +377,575 @@ bool BaseApplication::frameRenderingQueued(const Ogre::FrameEvent& evt)
     mKeyboard->capture();
     mMouse->capture();
 
-    CEGUI::System::getSingleton().injectTimePulse(evt.timeSinceLastFrame);
 
-    // mTrayMgr->frameRenderingQueued(evt);
+    //need to process input
+    if(state==Play)
+    {
+        if (playerState == PlayerState::Fire)
+        {
+            int val = (*equippedweapon)->fire();
+            if (val == 0)
+            {
 
-    // if (!mTrayMgr->isDialogVisible())
-    // {
-    //     mCameraMan->frameRenderingQueued(evt);   // if dialog isn't up, then update the camera
-    //     if (mDetailsPanel->isVisible())   // if details panel is visible, then update its contents
-    //     {
-    //         mDetailsPanel->setParamValue(0, Ogre::StringConverter::toString(mCamera->getDerivedPosition().x));
-    //         mDetailsPanel->setParamValue(1, Ogre::StringConverter::toString(mCamera->getDerivedPosition().y));
-    //         mDetailsPanel->setParamValue(2, Ogre::StringConverter::toString(mCamera->getDerivedPosition().z));
-    //         mDetailsPanel->setParamValue(4, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().w));
-    //         mDetailsPanel->setParamValue(5, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().x));
-    //         mDetailsPanel->setParamValue(6, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().y));
-    //         mDetailsPanel->setParamValue(7, Ogre::StringConverter::toString(mCamera->getDerivedOrientation().z));
-    //     }
-    // }
+                playerState = PlayerState::Reload;
+                last_playerState = PlayerState::Fire;
+            }
+            else if (val == 1)
+            {
+              cout << "firing!\n";
+              btVector3 dir = btVector3(cameraDir.x,cameraDir.y,cameraDir.z);
+              // cout << "\n" << dir << "\n";
+              btVector3 pos = player1->getPosbt() + btVector3(0,1,0) + dir/2.0;
+              //bulletVector.push_back((*equippedweapon)->spawnBullet(pos,dir,sim));
+              (*equippedweapon)->spawnBullet(pos,dir,sim);
+            }
+        }
+        else if (playerState == PlayerState::Reload)
+        {
+            if ((*equippedweapon)->reload())
+            {
+                playerState = last_playerState;
+            }
+        }
+
+        //Monster Code
+        /*
+        int j;
+        for(j = 0; j < level->num_monsters_left; j++)
+        {
+            //Monster* m_up = monster_list[j];
+            //m_up->m_animState->addTime(evt.timeSinceLastFrame);
+            //cout << "updating monster"<<j<<"\n";
+            //if(!j)
+                //monster_list.at(j)->printpos();
+            monster_list.at(j)->updateMonsters(level, evt);
+        }
+        */
+        //cout << "monsters updated\n";
+    }
+    processInput();// move up?
+
+    //step sim after processing input
+    if(state==Play){
+      //set player speed
+        //cout << player1->playerLV.x()<<","<<player1->playerLV.z()<<"\n";
+        if (player1->playerLV.x() == 0 && player1->playerLV.z()==0)
+        {
+            //player is not moving
+            //change animation state to idle
+            Ogre::Entity* entity = player1->p_entity;
+            player1->p_animState = player1->p_entity->getAnimationState("Idle1");
+
+        }
+        else
+        {
+            //player is moving
+            player1->p_animState = player1->p_entity->getAnimationState("Walk");
+        }
+
+        if(playerState == PlayerState::Fire)
+        {
+            player1->p_animState = player1->p_entity->getAnimationState("Attack3");
+            //player1->p_animState->addTime(evt.timeSinceLastFrame);
+        }
+        player1->p_animState->setLoop(true);
+        player1->p_animState->setEnabled(true);
+        player1->p_animState->addTime(evt.timeSinceLastFrame);
+
+        player1->getBody()->setLinearVelocity(btVector3(player1->playerLV.x(),0.000001,player1->playerLV.z()));
+        //cout << phi << "\n";
+        player1->setRotation(btQuaternion(btVector3(0,1,0),phi + 3.1415926));
+        //set projectile speeds
+        /*for(int i=0; i < bulletVector.size();i++){
+        btVector3 lv = (bulletVector[i])->linvel();
+
+        bulletVector[i]->getBody()->setLinearVelocity(lv);
+
+      }*/
+
+        GameObject * go;
+        for(int i=0; i <sim->getObjectListSize();i++){
+            go=sim->getObjectPtr(i);
+            //cout << "object "<< go->getName()<<"\n";
+            if((go->getName()).compare("bullet")==0){
+                btVector3 lv = ((Bullet*)go)->linvel();
+                go->getBody()->setLinearVelocity(lv);
+            }else if((go->getName()).compare("ninja")==0){
+                btVector3 lv =o2bVector3(((Monster*)go)->m_directionVector);
+                Ogre::Real speed = ((Monster*)go)->m_walkSpeed;
+                go->getBody()->setLinearVelocity(speed*lv);
+            }
+        }
+
+        sim->stepSimulation(evt, evt.timeSinceLastFrame,10,1./60.);
+
+        //GAME WIN
+        if (level->num_monsters_left <= 0)
+        {
+            mTrayMgr->showCursor();
+            bgmusic->playOrPause();
+            bgmusic->win();
+            state_label = mTrayMgr->createLabel(OgreBites::TL_CENTER, "Win", "You Win! :)", 400);
+            continue_button = mTrayMgr->createButton(OgreBites::TL_CENTER, "Continue", "Next Level");
+            // restart_button = mTrayMgr->createButton(OgreBites::TL_CENTER, "Restart", "Restart Level");
+            quit_button = mTrayMgr->createButton(OgreBites::TL_CENTER, "Exit", "Quit");
+            state = Win;
+        }
+
+        //GAME LOSE
+        else if (player1->player_health <= 0)
+        {
+            sim->lives--;
+            mTrayMgr->showCursor();
+            bgmusic->playOrPause();
+            if (sim->lives == 0)
+            {
+                bgmusic->lose();
+                state_label = mTrayMgr->createLabel(OgreBites::TL_CENTER, "Lose", "Game Over! You reached level: " + std::to_string(level_val), 400);
+                tryagain_button = mTrayMgr->createButton(OgreBites::TL_CENTER, "Try Again", "Start Over");
+                quit_button = mTrayMgr->createButton(OgreBites::TL_CENTER, "Exit", "Quit");
+                state = Lose;
+            }
+            else
+            {
+                state_label = mTrayMgr->createLabel(OgreBites::TL_CENTER, "Lose", "You Died and lose a life!", 400);
+                tryagain_button = mTrayMgr->createButton(OgreBites::TL_CENTER, "Try Again", "Try Again");
+                quit_button = mTrayMgr->createButton(OgreBites::TL_CENTER, "Exit", "Quit");
+                state = Lose;
+            }
+        }
+
+        player1->playerLV=btVector3(0,0,0);
+        float scrollSens=1000;
+        if(mz>scrollSens)
+            mz=scrollSens;
+        if(mz<0)
+            mz=0;
+        float scrollMod=scrollMax*(mz/scrollSens);
+        //jimmyjam
+        phi+=3.1415926-1.3;
+        Ogre::Vector3 cameraOffset=(Ogre::Vector3(cos(theta)*cos(phi),-sin(theta),cos(theta)*sin(-1*phi)));
+        phi-=3.1415926-1.3;
+
+        cameraPos=player1->getPos()-(scrollMod)*cameraDir + Ogre::Vector3(0,1.7,0) + 1.6*cameraOffset;
+        Ogre::Vector3 lightoffset=Ogre::Vector3(0,3,0);
+        light->setPosition(player1->getPos()+lightoffset);
+
+        mCamera->setPosition(cameraPos);
+        mCamera->lookAt(cameraPos+cameraDir);
+        scoreboard->setParamValue(0, std::to_string(sim->lives));
+        scoreboard->setParamValue(1, std::to_string(sim->monsters_killed));
+        scoreboard->setParamValue(2, (*equippedweapon)->name);
+        if ((*equippedweapon)->name == "Pistol")
+        {
+            scoreboard->setParamValue(3, std::to_string((*equippedweapon)->ammo_left()) + "/INF");
+        }
+        else
+            scoreboard->setParamValue(3, std::to_string((*equippedweapon)->ammo_left()) + "/" + std::to_string((*equippedweapon)->total_ammo_left()));
+        scoreboard->setParamValue(4, std::to_string(level->num_monsters_left));
+        //cout <<cameraDir.x<<","<<cameraDir.y<<","<<cameraDir.z<<"\n";
+    }
+
+    mTrayMgr->frameRenderingQueued(evt);
+
+
+
+
+    if (!mTrayMgr->isDialogVisible())
+    {
+        mCameraMan->frameRenderingQueued(evt);   // if dialog isn't up, then update the camera
+    }
+
     return true;
 }
 //-------------------------------------------------------------------------------------
+
 bool BaseApplication::keyPressed( const OIS::KeyEvent &arg )
 {
-    // if (mTrayMgr->isDialogVisible()) return true;   // don't process any more keys if dialog is up
+    if (mTrayMgr->isDialogVisible()) return true;   // don't process any more keys if dialog is up
 
 
-    // if (arg.key == OIS::KC_ESCAPE)
-    // {
-    //     mShutDown = true;
-    // }
+    if (arg.key == OIS::KC_ESCAPE)
+    {
+        mShutDown = true;
+    }
 
-    // mCameraMan->injectKeyDown(arg);
-    // return true;
+    if (state == Play)
+    {
+    /*    else if(arg.key == OIS::KC_9)
+            {
+                sounds->pauseMusic();
+            }
+        else if(arg.key == OIS::KC_1)
+            {
+                sounds->enableSound();
+            }*/
+        if (arg.key == OIS::KC_P)
+        {
+            state = Pause;
+            mTrayMgr->showCursor();
+            state_label = mTrayMgr->createLabel(OgreBites::TL_CENTER, "Pause", "Game Paused", 400);
+            resume_button = mTrayMgr->createButton(OgreBites::TL_CENTER, "Resume", "Resume");
+            restart_button = mTrayMgr->createButton(OgreBites::TL_CENTER, "Restart", "Restart Level");
+            quit_button = mTrayMgr->createButton(OgreBites::TL_CENTER, "Exit", "Quit");
+            bgmusic->playOrPause();
+            (*equippedweapon)->pause();
+        }
 
-    CEGUI::GUIContext& context = CEGUI::System::getSingleton().getDefaultGUIContext();
-    context.injectKeyDown((CEGUI::Key::Scan)arg.key);
-    context.injectChar((CEGUI::Key::Scan)arg.text);
+        else if(arg.key == OIS::KC_M)
+            {
+                bgmusic->playOrPause();
+                if (scoreboard->getParamValue(5) == "Off")
+                    scoreboard->setParamValue(5, "On");
+                else
+                    scoreboard->setParamValue(5, "Off");
+            }
+
+        else if (arg.key == OIS::KC_R)
+        {
+            playerState = PlayerState::Reload;
+        }
+
+        else if(arg.key == OIS::KC_W){
+             up=true;
+        }
+        else if(arg.key == OIS::KC_A){
+            left=true;
+        }
+        else if(arg.key == OIS::KC_S){
+            down=true;
+        }
+        else if(arg.key == OIS::KC_D){
+            right=true;
+        }
+        else if(arg.key == OIS::KC_1 && weapon != WeaponState::Weapon1){
+            weapon = WeaponState::Weapon1;
+            playerState = PlayerState::NoFire;
+            (*equippedweapon)->cancel_reload();
+            equippedweapon = &weapon1;
+            (*equippedweapon)->switch_weapon();
+        }
+        else if(arg.key == OIS::KC_2 && weapon != WeaponState::Weapon2){
+            weapon = WeaponState::Weapon2;
+            playerState = PlayerState::NoFire;
+            (*equippedweapon)->cancel_reload();
+            equippedweapon = &weapon2;
+            (*equippedweapon)->switch_weapon();
+        }
+        else if(arg.key == OIS::KC_3 && weapon != WeaponState::Weapon3){
+            weapon = WeaponState::Weapon3;
+            playerState = PlayerState::NoFire;
+            (*equippedweapon)->cancel_reload();
+            equippedweapon = &weapon3;
+            (*equippedweapon)->switch_weapon();
+        }
+        else if(arg.key == OIS::KC_4 && weapon != WeaponState::Weapon4){
+            weapon = WeaponState::Weapon4;
+            playerState = PlayerState::NoFire;
+            (*equippedweapon)->cancel_reload();
+            equippedweapon = &weapon4;
+            (*equippedweapon)->switch_weapon();
+        }
+        //Monster Code
+        //============
+        /*
+        else if(arg.key == OIS::KC_SPACE)
+        {
+
+            if (judgement_day > num_monsters)
+            {
+                judgement_day = 0;
+            }
+
+            monster_list[judgement_day++]->killMonster();
+            num_monsters--;
+        }
+        */
+
+        //============
+    }
+
+    else if (state == Pause)
+    {
+        if (arg.key == OIS::KC_P)
+        {
+            mTrayMgr->clearTray(OgreBites::TL_CENTER);
+            mTrayMgr->destroyWidget(state_label);
+            mTrayMgr->destroyWidget(resume_button);
+            mTrayMgr->destroyWidget(restart_button);
+            mTrayMgr->destroyWidget(quit_button);
+            mTrayMgr->hideCursor();
+            bgmusic->playOrPause();
+            state = Play;
+            (*equippedweapon)->unpause();
+        }
+    }
+
+    //mCameraMan->injectKeyDown(arg);
     return true;
 }
 
 bool BaseApplication::keyReleased( const OIS::KeyEvent &arg )
 {
-    // mCameraMan->injectKeyUp(arg);
-    // return true;
+    //mCameraMan->injectKeyUp(arg);
 
-    CEGUI::System::getSingleton().getDefaultGUIContext().injectKeyUp((CEGUI::Key::Scan)arg.key);
+    if(arg.key == OIS::KC_W){
+      up=false;
+    }
+    else if(arg.key == OIS::KC_A){
+        left=false;
+
+    }
+    else if(arg.key == OIS::KC_S){
+        down=false;
+    }
+    else if(arg.key == OIS::KC_D){
+        right=false;
+    }
+
     return true;
 }
-
-CEGUI::MouseButton convertButton(OIS::MouseButtonID buttonID)
+void BaseApplication::buttonHit (OgreBites::Button *button)
 {
-    switch (buttonID)
+    if (button == play_button)
     {
-    case OIS::MB_Left:
-        return CEGUI::LeftButton;
- 
-    case OIS::MB_Right:
-        return CEGUI::RightButton;
- 
-    case OIS::MB_Middle:
-        return CEGUI::MiddleButton;
- 
-    default:
-        return CEGUI::LeftButton;
+        // Create the scene
+        mTrayMgr->clearTray(OgreBites::TL_BOTTOM);
+        mTrayMgr->destroyAllWidgets();
+        cout << "\n\nLEVEL GEN\n\n";
+        //generate level
+        level=new Level(mSceneMgr);
+        //level->generateRoom(4,3);
+        level->proceduralLevelGen(1);
+        //level->testLevelGen();
+        cout << "\nprinting level:\n";
+        level->printLevel();
+
+        //create player
+        player1= new Player(mSceneMgr);
+
+        //physics
+        sim = new Simulator();
+
+        // Create the scene
+        createScene();
+        mTrayMgr->hideCursor();
+        state = Play;
+        delete rect;
+        progress_label = mTrayMgr->createLabel(OgreBites::TL_TOP, "Welcome", "Level " + std::to_string(level_val) , 400);
+    }
+    else if (button == resume_button)
+    {
+        mTrayMgr->clearTray(OgreBites::TL_CENTER);
+        mTrayMgr->destroyWidget(state_label);
+        mTrayMgr->destroyWidget(resume_button);
+        mTrayMgr->destroyWidget(restart_button);
+        mTrayMgr->destroyWidget(quit_button);
+        mTrayMgr->hideCursor();
+        bgmusic->playOrPause();
+        (*equippedweapon)->unpause();
+        state = Play;
+    }
+    else if (button == tryagain_button)
+    {
+        // Destroy current scene, regenerate level
+
+        sim->clearObjectList();
+        //Monster Code
+
+        srand(time(0));
+
+        // Ogre::Vector3 startPos=Ogre::Vector3(-10,1,0);
+        // btVector3 ori=btVector3(startPos.x,startPos.y,startPos.z);
+        // player1->setPos(btVector3(ori));
+        bgmusic->playOrPause();
+        mTrayMgr->clearTray(OgreBites::TL_CENTER);
+        mTrayMgr->destroyWidget(state_label);
+        mTrayMgr->destroyWidget(tryagain_button);
+        mTrayMgr->destroyWidget(quit_button);
+        mTrayMgr->hideCursor();
+
+        if (sim->lives == 0)
+        {
+            level->num_monsters = 3;
+            level->num_monsters_left = 3;
+            level_val = 1;
+            sim->lives = 3;
+            sim->lvl_lives = 3;
+            sim->monsters_killed = 0;
+            sim->lvl_monsters_killed = 0;
+            weapon1->replenish_weapon();
+            weapon2->replenish_weapon();
+            weapon3->replenish_weapon();
+            weapon4->replenish_weapon();
+        }
+        else
+        {
+            sim->lvl_lives = sim->lives;
+            sim->monsters_killed = sim->lvl_monsters_killed;
+            weapon1->reset_level();
+            weapon2->reset_level();
+            weapon3->reset_level();
+            weapon4->reset_level();
+        }
+        for (int i = 0; i < level->num_monsters; i++)
+        {
+            Monster* m = spawnMonster();
+            m->changeState(Monster::STATE_WANDER, level, player1);
+            // monster_list.push_back(m);
+            sim->addObject(m);
+        }
+        player1->player_health = 10.0;
+        player1->hit = false;
+        level->num_monsters_left = level->num_monsters;
+        equippedweapon = &weapon1;
+        weapon = WeaponState::Weapon1;
+        last_playerState = PlayerState::NoFire;
+        state = Play;
+        mTrayMgr->clearTray(OgreBites::TL_TOP);
+        mTrayMgr->destroyWidget(progress_label);
+        progress_label = mTrayMgr->createLabel(OgreBites::TL_TOP, "Repeat Level", "Level " + std::to_string(level_val) , 400);
+    }
+    else if (button == continue_button)
+    {
+        // Destroy current scene, regenerate level
+
+        sim->clearObjectList();
+        //Monster Code
+
+        srand(time(0));
+
+        // Ogre::Vector3 startPos=Ogre::Vector3(-10,1,0);
+        // btVector3 ori=btVector3(startPos.x,startPos.y,startPos.z);
+        // player1->setPos(btVector3(ori));
+        bgmusic->playOrPause();
+        level->num_monsters = level->num_monsters + 2;
+        level_val++;
+        for (int i = 0; i < level->num_monsters; i++)
+        {
+            Monster* m = spawnMonster();
+            m->changeState(Monster::STATE_WANDER, level, player1);
+            // monster_list.push_back(m);
+            sim->addObject(m);
+        }
+        level->num_monsters_left = level->num_monsters;
+        sim->lvl_monsters_killed = sim->monsters_killed;
+        sim->lvl_lives = sim->lives;
+        mTrayMgr->clearTray(OgreBites::TL_TOP);
+        mTrayMgr->destroyWidget(progress_label);
+        if (weapon1->next_level(level_val))
+        {
+            // MESSAGE: WEAPONS REPLENISHED
+            progress_label = mTrayMgr->createLabel(OgreBites::TL_TOP, "Weapons Replenished", "Ammo Restocked! Level " + std::to_string(level_val) , 400);
+        }
+        else
+            progress_label = mTrayMgr->createLabel(OgreBites::TL_TOP, "Next Level", "Level " + std::to_string(level_val) , 400);
+        weapon2->next_level(level_val);
+        weapon3->next_level(level_val);
+        weapon4->next_level(level_val);
+
+        mTrayMgr->clearTray(OgreBites::TL_CENTER);
+        mTrayMgr->destroyWidget(state_label);
+        // mTrayMgr->destroyWidget(restart_button);
+        mTrayMgr->destroyWidget(continue_button);
+        mTrayMgr->destroyWidget(quit_button);
+        mTrayMgr->hideCursor();
+        last_playerState = PlayerState::NoFire;
+        state = Play;
+    }
+    else if (button == restart_button)
+    {
+        // Destroy current scene, regenerate level
+        sim->clearObjectList();
+        //Monster Code
+
+        srand(time(0));
+
+        // Ogre::Vector3 startPos=Ogre::Vector3(-10,1,0);
+        // btVector3 ori=btVector3(startPos.x,startPos.y,startPos.z);
+        // player1->setPos(btVector3(ori));
+        bgmusic->playOrPause();
+
+        for (int i = 0; i < level->num_monsters; i++)
+        {
+            Monster* m = spawnMonster();
+            m->changeState(Monster::STATE_WANDER, level, player1);
+            // monster_list.push_back(m);
+            sim->addObject(m);
+        }
+        level->num_monsters_left = level->num_monsters;
+        sim->monsters_killed = sim->lvl_monsters_killed;
+        sim->lives = sim->lvl_lives;
+        weapon1->reset_level();
+        weapon2->reset_level();
+        weapon3->reset_level();
+        weapon4->reset_level();
+        equippedweapon = &weapon1;
+        weapon = WeaponState::Weapon1;
+        mTrayMgr->clearTray(OgreBites::TL_CENTER);
+        mTrayMgr->destroyWidget(state_label);
+        mTrayMgr->destroyWidget(restart_button);
+        mTrayMgr->destroyWidget(resume_button);
+        mTrayMgr->destroyWidget(quit_button);
+        mTrayMgr->hideCursor();
+        last_playerState = PlayerState::NoFire;
+        state = Play;
+
+        mTrayMgr->clearTray(OgreBites::TL_TOP);
+        mTrayMgr->destroyWidget(progress_label);
+        progress_label = mTrayMgr->createLabel(OgreBites::TL_TOP, "Restart Level", "Level " + std::to_string(level_val) , 400);
+    }
+    else if (button == quit_button)
+    {
+        mShutDown = true;
     }
 }
-
 bool BaseApplication::mouseMoved( const OIS::MouseEvent &arg )
 {
-    
-    // if (mTrayMgr->injectMouseMove(arg)) return true;
-    // mCameraMan->injectMouseMove(arg);
-    
-    // return true;
-
-    CEGUI::GUIContext& context = CEGUI::System::getSingleton().getDefaultGUIContext();
-    context.injectMouseMove(arg.state.X.rel, arg.state.Y.rel);
-    // Scroll wheel.
-    if (arg.state.Z.rel)
-        context.injectMouseWheelChange(arg.state.Z.rel / 120.0f);
+    if(state==Play){
+    mx=(float)arg.state.X.rel;
+    my=(float)arg.state.Y.rel;
+    mz-=(float)arg.state.Z.rel;
+    }
+    if (state == Main || state == Pause || state == Win || state == Lose){
+        mTrayMgr->injectMouseMove(arg);
+      }
+      //else
+      //mCameraMan->injectMouseMove(arg);
     return true;
 }
 
 bool BaseApplication::mousePressed( const OIS::MouseEvent &arg, OIS::MouseButtonID id )
 {
-    // if (mTrayMgr->injectMouseDown(arg, id)) return true;
-    // mCameraMan->injectMouseDown(arg, id);
-    // return true;
+    if (state==Play){
+        if (id == OIS::MB_Left)
+        {
 
-    CEGUI::System::getSingleton().getDefaultGUIContext().injectMouseButtonDown(convertButton(id));
+            last_playerState = PlayerState::Fire;
+            if (playerState != PlayerState::Reload)
+            {
+                playerState = PlayerState::Fire;
+
+            }
+        }
+    }
+    if (mTrayMgr->injectMouseDown(arg, id)) return true;
+    //mCameraMan->injectMouseDown(arg, id);
     return true;
 }
 
 bool BaseApplication::mouseReleased( const OIS::MouseEvent &arg, OIS::MouseButtonID id )
 {
-    // if (mTrayMgr->injectMouseUp(arg, id)) return true;
-    // mCameraMan->injectMouseUp(arg, id);
-    // return true;
-    CEGUI::System::getSingleton().getDefaultGUIContext().injectMouseButtonUp(convertButton(id));
-    return true;
-}
-
-bool BaseApplication::quit(const CEGUI::EventArgs &e)
-{
-    mShutDown = true;
+    if (id == OIS::MB_Left)
+    {
+        last_playerState = PlayerState::NoFire;
+        if (playerState != PlayerState::Reload)
+        {
+            playerState = PlayerState::NoFire;
+        }
+    }
+    if (mTrayMgr->injectMouseUp(arg, id)) return true;
+    //mCameraMan->injectMouseUp(arg, id);
     return true;
 }
 
@@ -420,6 +977,67 @@ void BaseApplication::windowClosed(Ogre::RenderWindow* rw)
         }
     }
 }
+
+void BaseApplication::processInput(){
+  //move camera with mouse
+  phi-=mx*mSensitivity;
+  theta-=my*mSensitivity;//to not invert mouse
+
+  float r90=3.1400/2.0; // just shy of 90*
+  if(theta>r90){
+      theta=r90;}
+  else if(theta<=-1*r90){
+      theta=-1*r90;}
+
+  if(phi>3.14159*2)
+    phi-=3.14159*2;
+  if(phi<0*2)
+    phi+=3.14159*2;
+
+
+  cameraDir=Ogre::Vector3(sin(phi)*cos(theta),sin(theta),cos(phi)*cos(theta));
+
+  //move camera with keyboard
+  float cameraSpeed=7;
+  if(up){
+    //cameraPos+=cameraSpeed*cameraDir;
+    //player1->setLV((cameraSpeed*cameraDir));
+    player1->playerLV.setX(cameraSpeed*sin(phi));
+    player1->playerLV.setZ(cameraSpeed*cos(phi));
+  }
+  if(down){
+    //cameraPos-=cameraSpeed*cameraDir;
+    player1->playerLV.setX(-1*cameraSpeed*sin(phi));
+    player1->playerLV.setZ(-1*cameraSpeed*cos(phi));
+  }
+  if(left){
+    //cameraDir.x*xi+cameraDir.z*zi=0
+    player1->playerLV.setX(player1->playerLV.x()+cameraSpeed*cos(phi));
+    player1->playerLV.setZ(player1->playerLV.z()-cameraSpeed*sin(phi));
+    //cameraPos.x+=cameraSpeed*cos(phi);
+    //cameraPos.z-=cameraSpeed*sin(phi);
+  }
+  if(right){
+    player1->playerLV.setX(player1->playerLV.x()-cameraSpeed*cos(phi));
+    player1->playerLV.setZ(player1->playerLV.z()+cameraSpeed*sin(phi));
+    //  cameraPos.x-=cameraSpeed*cos(phi);
+      //cameraPos.z+=cameraSpeed*sin(phi);
+  }
+
+  //mCamera->setPosition(cameraPos);
+  //mCamera->lookAt(cameraPos+cameraDir);
+
+  //cout << "t,p: " << theta << " " << phi << "\n";
+  // cout << "pos: {"<<cameraPos.x<<","<<cameraPos.y<<","<<cameraPos.z<<"}\n";
+   //cout << "dir: {"<<cameraDir.x<<","<<cameraDir.y<<","<<cameraDir.z<<"}\n";
+
+  mx=0;
+  my=0;
+  //mz=0;
+
+}
+
+
 
 #if OGRE_PLATFORM == OGRE_PLATFORM_WIN32
 #define WIN32_LEAN_AND_MEAN

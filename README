@@ -1,0 +1,6 @@
+NIGHT OF 1000 NINJAS
+by Varun Nagaich, Luke Sargent, Nishant Gupta
+
+to compile: run ./buildit in the local directory, then ./OgreApp
+
+Controls: W/A/S/D for movement, mouse controls camera and aiming, scrolling the mouse wheel increases distance, left click attacks, 1/2/3 buttons change weapons, and R for reload. P for pause/unpause and M for music on/off.
